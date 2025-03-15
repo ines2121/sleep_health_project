@@ -1,0 +1,16 @@
+{
+    "model_name": "random_forest",
+    "cv_score": 0.8406467857142855,
+    "test_rmse": 0.6708452379896076,
+    "test_r2": 0.7106928571428571,
+    "features": [
+        "Age",
+        "Sleep Duration",
+        "Physical Activity Level",
+        "Stress Level",
+        "Heart Rate",
+        "Daily Steps",
+        "Gender_num",
+        "Blood_Pressure_num"
+    ]
+}

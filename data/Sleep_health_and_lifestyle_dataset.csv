@@ -1,0 +1,16 @@
+Person ID,Gender,Age,Occupation,Sleep Duration,Quality of Sleep,Physical Activity Level,Stress Level,BMI Category,Blood Pressure,Heart Rate,Daily Steps,Sleep Disorder
+1,Male,27,Software Engineer,7.5,8,45,6,Normal,Normal,70,8000,None
+2,Female,34,Doctor,6.2,5,30,8,Overweight,High,85,5000,Insomnia
+3,Male,45,Teacher,8.0,9,60,4,Normal,Normal,65,10000,None
+4,Female,29,Nurse,5.8,4,20,9,Normal,High,90,4000,Sleep Apnea
+5,Male,52,Manager,7.0,7,40,7,Overweight,High,75,6000,None
+6,Female,38,Lawyer,6.5,6,35,8,Normal,Normal,72,7000,Insomnia
+7,Male,31,Engineer,7.8,8,55,5,Normal,Normal,68,9000,None
+8,Female,42,Accountant,6.0,5,25,7,Overweight,High,82,5500,Sleep Apnea
+9,Male,36,Sales,7.2,7,50,6,Normal,Normal,70,8500,None
+10,Female,33,Designer,6.8,6,40,7,Normal,Normal,73,7500,None
+11,Male,48,Professor,7.5,8,45,5,Overweight,High,76,6500,None
+12,Female,29,Marketing,6.3,5,30,8,Normal,Normal,78,6000,Insomnia
+13,Male,39,Chef,5.5,4,35,9,Overweight,High,88,7000,Sleep Apnea
+14,Female,44,Writer,8.2,9,55,4,Normal,Normal,67,9500,None
+15,Male,35,Analyst,7.0,7,40,6,Normal,Normal,72,8000,None
