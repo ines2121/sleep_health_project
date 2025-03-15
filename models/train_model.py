@@ -1,99 +1,176 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 import joblib
+import json
 import os
 
-# Charger les données
-data = pd.read_csv("../data/Sleep_health_and_lifestyle_dataset.csv")
-
-# Préparer les features
-features = [
-    'Age', 'Sleep Duration', 'Physical Activity Level',
-    'Stress Level', 'Heart Rate', 'Daily Steps'
-]
-
-# Convertir Gender et Blood Pressure en variables numériques
-data['Gender_num'] = (data['Gender'] == 'Male').astype(int)
-data['Blood_Pressure_num'] = (data['Blood Pressure'] == 'High').astype(int)
-
-features.extend(['Gender_num', 'Blood_Pressure_num'])
-
-X = data[features]
-y = data['Quality of Sleep']
-
-# Split les données
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# Standardiser les features
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
-
-# Définir les modèles à tester
-models = {
-    'random_forest': RandomForestRegressor(n_estimators=100, random_state=42),
-    'gradient_boosting': GradientBoostingRegressor(n_estimators=100, random_state=42)
-}
-
-# Évaluer chaque modèle
-results = {}
-for name, model in models.items():
-    # Cross-validation
-    cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5)
+def prepare_data(data):
+    """Prépare les données pour l'entraînement du modèle"""
+    features = [
+        'Age', 'Sleep Duration', 'Physical Activity Level',
+        'Stress Level', 'Heart Rate', 'Daily Steps'
+    ]
     
-    # Entraînement sur l'ensemble complet
-    model.fit(X_train_scaled, y_train)
+    # Convertir Gender et Blood Pressure en variables numériques
+    data['Gender_num'] = (data['Gender'] == 'Male').astype(int)
+    data['Blood_Pressure_num'] = (data['Blood Pressure'] == 'High').astype(int)
     
-    # Prédictions sur le test set
-    y_pred = model.predict(X_test_scaled)
+    features.extend(['Gender_num', 'Blood_Pressure_num'])
     
-    # Métriques
-    results[name] = {
-        'cv_mean': cv_scores.mean(),
-        'cv_std': cv_scores.std(),
-        'test_rmse': np.sqrt(mean_squared_error(y_test, y_pred)),
-        'test_r2': r2_score(y_test, y_pred),
-        'model': model
+    X = data[features]
+    y = data['Quality of Sleep']
+    
+    return X, y, features
+
+def train_model(X, y, model_type='random_forest', param_grid=None):
+    """Entraîne un modèle avec GridSearchCV"""
+    if param_grid is None:
+        param_grid = get_default_param_grid(model_type)
+    
+    # Initialiser le modèle
+    model = get_model_instance(model_type)
+    
+    # GridSearchCV
+    grid_search = GridSearchCV(
+        model,
+        param_grid,
+        cv=5,
+        scoring='r2',
+        n_jobs=-1,
+        verbose=1
+    )
+    
+    # Entraînement
+    grid_search.fit(X, y)
+    
+    return grid_search.best_estimator_, grid_search.best_params_
+
+def get_model_instance(model_type):
+    """Retourne une instance du modèle spécifié"""
+    models = {
+        'random_forest': RandomForestRegressor(random_state=42),
+        'gradient_boosting': GradientBoostingRegressor(random_state=42)
+    }
+    return models.get(model_type)
+
+def get_default_param_grid(model_type):
+    """Retourne la grille de paramètres par défaut pour chaque type de modèle"""
+    param_grids = {
+        'random_forest': {
+            'n_estimators': [50, 100, 200],
+            'max_depth': [None, 10, 20, 30],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4]
+        },
+        'gradient_boosting': {
+            'n_estimators': [50, 100, 200],
+            'learning_rate': [0.01, 0.1, 0.3],
+            'max_depth': [3, 5, 7],
+            'min_samples_split': [2, 5, 10]
+        }
+    }
+    return param_grids.get(model_type)
+
+def evaluate_model(model, X, y):
+    """Évalue le modèle et retourne les métriques"""
+    y_pred = model.predict(X)
+    return {
+        'rmse': np.sqrt(mean_squared_error(y, y_pred)),
+        'r2': r2_score(y, y_pred)
     }
 
-# Sélectionner le meilleur modèle
-best_model_name = max(results, key=lambda k: results[k]['test_r2'])
-best_model = results[best_model_name]['model']
+def save_model(model, scaler, features, metrics, save_dir='../models/saved_models'):
+    """Sauvegarde le modèle, le scaler et les métriques"""
+    os.makedirs(save_dir, exist_ok=True)
+    
+    # Sauvegarder le modèle et le scaler
+    joblib.dump(model, f'{save_dir}/best_sleep_model.joblib')
+    joblib.dump(scaler, f'{save_dir}/scaler.joblib')
+    
+    # Sauvegarder les features
+    with open(f'{save_dir}/feature_list.txt', 'w') as f:
+        f.write('\n'.join(features))
+    
+    # Sauvegarder les métriques
+    with open(f'{save_dir}/model_metrics.json', 'w') as f:
+        json.dump(metrics, f, indent=4)
 
-# Créer le dossier saved_models s'il n'existe pas
-os.makedirs('../models/saved_models', exist_ok=True)
+def main():
+    """Fonction principale d'entraînement"""
+    # Charger les données
+    data = pd.read_csv("../data/Sleep_health_and_lifestyle_dataset.csv")
+    
+    # Préparer les données
+    X, y, features = prepare_data(data)
+    
+    # Split les données
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # Standardiser les features
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    
+    # Convertir en DataFrame pour conserver les noms des colonnes
+    X_train_scaled = pd.DataFrame(X_train_scaled, columns=X_train.columns)
+    X_test_scaled = pd.DataFrame(X_test_scaled, columns=X_test.columns)
+    
+    # Entraîner les modèles
+    models_to_train = ['random_forest', 'gradient_boosting']
+    results = {}
+    
+    for model_type in models_to_train:
+        print(f"\nEntraînement du modèle {model_type}...")
+        model, best_params = train_model(X_train_scaled, y_train, model_type)
+        
+        # Évaluation
+        train_metrics = evaluate_model(model, X_train_scaled, y_train)
+        test_metrics = evaluate_model(model, X_test_scaled, y_test)
+        
+        results[model_type] = {
+            'model': model,
+            'best_params': best_params,
+            'train_metrics': train_metrics,
+            'test_metrics': test_metrics
+        }
+    
+    # Sélectionner le meilleur modèle
+    best_model_name = max(results, key=lambda k: results[k]['test_metrics']['r2'])
+    best_model_results = results[best_model_name]
+    
+    # Sauvegarder le meilleur modèle et ses métriques
+    metrics = {
+        'model_name': best_model_name,
+        'best_parameters': best_model_results['best_params'],
+        'train_metrics': best_model_results['train_metrics'],
+        'test_metrics': best_model_results['test_metrics'],
+        'features': features
+    }
+    
+    save_model(
+        best_model_results['model'],
+        scaler,
+        features,
+        metrics
+    )
+    
+    # Afficher les résultats
+    print("\nRésultats de l'évaluation des modèles :")
+    for name, result in results.items():
+        print(f"\n{name.upper()}:")
+        print(f"Meilleurs paramètres : {result['best_params']}")
+        print(f"Métriques d'entraînement :")
+        print(f"  - RMSE : {result['train_metrics']['rmse']:.3f}")
+        print(f"  - R² : {result['train_metrics']['r2']:.3f}")
+        print(f"Métriques de test :")
+        print(f"  - RMSE : {result['test_metrics']['rmse']:.3f}")
+        print(f"  - R² : {result['test_metrics']['r2']:.3f}")
+    
+    print(f"\nMeilleur modèle : {best_model_name}")
 
-# Sauvegarder le modèle et le scaler
-joblib.dump(best_model, '../models/saved_models/best_sleep_model.joblib')
-joblib.dump(scaler, '../models/saved_models/scaler.joblib')
-
-# Sauvegarder les features utilisées
-with open('../models/saved_models/feature_list.txt', 'w') as f:
-    f.write('\n'.join(features))
-
-# Afficher les résultats
-print("\nRésultats de l'évaluation des modèles :")
-for name, metrics in results.items():
-    print(f"\n{name.upper()}:")
-    print(f"CV Score: {metrics['cv_mean']:.3f} (+/- {metrics['cv_std']*2:.3f})")
-    print(f"Test RMSE: {metrics['test_rmse']:.3f}")
-    print(f"Test R²: {metrics['test_r2']:.3f}")
-
-print(f"\nMeilleur modèle: {best_model_name}")
-
-# Sauvegarder les métriques du meilleur modèle
-best_metrics = {
-    'model_name': best_model_name,
-    'cv_score': float(results[best_model_name]['cv_mean']),
-    'test_rmse': float(results[best_model_name]['test_rmse']),
-    'test_r2': float(results[best_model_name]['test_r2']),
-    'features': features
-}
-
-import json
-with open('../models/saved_models/model_metrics.json', 'w') as f:
-    json.dump(best_metrics, f, indent=4)
+if __name__ == "__main__":
+    main()
