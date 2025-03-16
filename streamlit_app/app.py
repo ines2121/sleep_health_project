@@ -1,9 +1,11 @@
 import streamlit as st
-import requests
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import numpy as np
+import requests
+import json
+from datetime import datetime
 import os
 
 # Configuration de la page
@@ -13,6 +15,33 @@ st.set_page_config(
     layout="wide"
 )
 
+# Configuration des options en français
+st.markdown("""
+    <style>
+        .stDownloadButton button {
+            visibility: hidden;
+        }
+        .stDownloadButton button::after {
+            visibility: visible;
+            content: 'Télécharger';
+        }
+        .stDeployButton button {
+            visibility: hidden;
+        }
+        .stDeployButton button::after {
+            visibility: visible;
+            content: 'Déployer';
+        }
+        button[title="View fullscreen"] {
+            visibility: hidden;
+        }
+        button[title="View fullscreen"]::after {
+            visibility: visible;
+            content: 'Plein écran';
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # Dictionnaire de traduction des caractéristiques
 feature_names = {
     'Person ID': 'ID Personne',
@@ -21,7 +50,7 @@ feature_names = {
     'Occupation': 'Profession',
     'Sleep Duration': 'Durée du Sommeil',
     'Quality of Sleep': 'Qualité du Sommeil',
-    'Physical Activity Level': 'Niveau d\'Activité Physique',
+    'Physical Activity Level': "Niveau d'Activité Physique",
     'Stress Level': 'Niveau de Stress',
     'BMI Category': 'Catégorie IMC',
     'Blood Pressure': 'Pression Artérielle',
@@ -30,13 +59,13 @@ feature_names = {
     'Sleep Disorder': 'Trouble du Sommeil'
 }
 
-# URL de l'API depuis la variable d'environnement
-API_URL = os.getenv('API_URL', 'http://localhost:8002')
+# URL de l'API
+API_URL = "http://localhost:8000"
 
 # Chargement des données d'exemple
 @st.cache_data
 def load_data():
-    return pd.read_csv("/Users/ines/Desktop/sleep_health_project/data/Sleep_health_and_lifestyle_dataset.csv")
+    return pd.read_csv("../data/Sleep_health_and_lifestyle_dataset.csv")
 
 df = load_data()
 
@@ -121,35 +150,58 @@ with tab1:
                 st.write("### 📈 Analyse des Facteurs")
                 
                 # Normalisation des valeurs pour le graphique radar
+                factors = [
+                    'Durée du Sommeil',
+                    'Activité Physique',
+                    'Pas Quotidiens',
+                    'Fréquence Cardiaque',
+                    'Stress'
+                ]
+                
                 max_values = {
                     'Durée du Sommeil': 10,
                     'Activité Physique': 120,
-                    'Stress': 10,
                     'Pas Quotidiens': 25000,
-                    'Fréquence Cardiaque': 120
+                    'Fréquence Cardiaque': 120,
+                    'Stress': 10
                 }
                 
                 normalized_values = {
-                    'Durée du Sommeil': sleep_duration / max_values['Durée du Sommeil'],
-                    'Activité Physique': physical_activity / max_values['Activité Physique'],
-                    'Stress': (10 - stress_level) / 10,  # Inverse pour que moins de stress soit mieux
-                    'Pas Quotidiens': daily_steps / max_values['Pas Quotidiens'],
-                    'Fréquence Cardiaque': (120 - heart_rate) / 50  # Normalise pour que plus bas soit mieux
+                    'Durée du Sommeil': min(sleep_duration / 8, 1),  # Optimal autour de 8h
+                    'Activité Physique': min(physical_activity / 60, 1),  # Optimal autour de 60min
+                    'Pas Quotidiens': min(daily_steps / 10000, 1),  # Optimal autour de 10000 pas
+                    'Fréquence Cardiaque': min(max(60, 120 - heart_rate) / 60, 1),  # Optimal autour de 60-80
+                    'Stress': 1 - (stress_level / 10)  # Inverse pour que moins de stress soit mieux
                 }
                 
                 fig = go.Figure()
                 
                 fig.add_trace(go.Scatterpolar(
-                    r=list(normalized_values.values()),
-                    theta=list(normalized_values.keys()),
+                    r=[normalized_values[factor] for factor in factors],
+                    theta=factors,
                     fill='toself',
                     name='Vos valeurs'
                 ))
                 
                 fig.update_layout(
-                    polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
-                    showlegend=True,
-                    title="Analyse des Facteurs de Sommeil"
+                    polar=dict(
+                        radialaxis=dict(
+                            visible=True,
+                            range=[0, 1],
+                            tickmode='array',
+                            ticktext=['0%', '25%', '50%', '75%', '100%'],
+                            tickvals=[0, 0.25, 0.5, 0.75, 1],
+                            tickfont=dict(color='red')
+                        )
+                    ),
+                    showlegend=False,
+                    title={
+                        'text': "Analyse des Facteurs de Sommeil",
+                        'y': 0.95,
+                        'x': 0.5,
+                        'xanchor': 'center',
+                        'yanchor': 'top'
+                    }
                 )
                 
                 st.plotly_chart(fig)
@@ -162,7 +214,7 @@ with tab1:
 with tab2:
     st.write("### 📈 Suivi Temporel du Sommeil")
     
-    # Charger les données de suivi depuis la session state
+    # Initialiser l'historique s'il n'existe pas
     if 'sleep_history' not in st.session_state:
         st.session_state.sleep_history = []
     
@@ -181,51 +233,62 @@ with tab2:
         st.plotly_chart(fig_evolution)
         
         # Tableau récapitulatif
-        st.write("### 📋 Historique Détailé")
-        st.dataframe(history_df)
-        
-        # Export des données
-        csv = history_df.to_csv(index=False)
-        st.download_button(
-            label="📥 Exporter l'historique (Format CSV)",
-            data=csv,
-            file_name="mon_historique_sommeil.csv",
-            mime="text/csv"
-        )
+        st.write("### 📋 Historique Détaillé")
+        st.dataframe(history_df.style.highlight_max(subset=['Qualité du Sommeil'], color='#90EE90'))
     else:
-        st.info("👋 Utilisez l'onglet Analyse pour commencer votre suivi du sommeil !")
+        st.info("Aucun historique disponible. Faites votre première analyse !")
 
 with tab3:
-    st.write("### 📊 Visualisation des Données")
+    st.write("### 📊 Visualisations des Données")
     
-    # Sélection du type de visualisation
     viz_type = st.selectbox(
-        "Choisissez votre visualisation",
-        ["Distribution du Sommeil", "Corrélation", "Tendances par Profession", "Analyse par Durée", "Impact du Stress"]
+        "Choisir le type de visualisation",
+        ["Distribution", "Corrélation", "Tendances par Profession", "Analyse par Durée", "Analyse Multifactorielle"]
     )
     
-    if viz_type == "Distribution du Sommeil":
-        fig = px.histogram(
+    if viz_type == "Distribution":
+        fig = px.box(
             df,
-            x="Sleep Duration",
+            x="Quality of Sleep",
+            y="Sleep Duration",
             color="Quality of Sleep",
-            nbins=20,
             title="Distribution de la Durée du Sommeil par Qualité",
             labels=feature_names
         )
         st.plotly_chart(fig)
         
     elif viz_type == "Corrélation":
-        # Sélection des colonnes numériques
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
-        corr = df[numeric_cols].corr()
+        # Créer une copie du dataframe pour la corrélation
+        df_corr = df.copy()
+        
+        # Convertir les variables catégorielles en numériques
+        df_corr['Gender_num'] = (df_corr['Gender'] == 'Male').astype(int)
+        df_corr['Blood_Pressure_num'] = (df_corr['Blood Pressure'] == 'High').astype(int)
+        
+        # Sélectionner uniquement les colonnes numériques pour la corrélation
+        numeric_cols = ['Age', 'Sleep Duration', 'Quality of Sleep', 'Physical Activity Level',
+                       'Stress Level', 'Heart Rate', 'Daily Steps', 'Gender_num', 'Blood_Pressure_num']
+        
+        correlation = df_corr[numeric_cols].corr()
+        
+        # Traduire les noms des colonnes
+        correlation.index = [feature_names.get(col, col.replace('_num', '')) for col in correlation.index]
+        correlation.columns = [feature_names.get(col, col.replace('_num', '')) for col in correlation.columns]
         
         fig = px.imshow(
-            corr,
+            correlation,
             labels=dict(color="Corrélation"),
             color_continuous_scale="RdBu",
             title="Matrice de Corrélation"
         )
+        
+        # Ajuster la taille et la rotation des labels
+        fig.update_layout(
+            height=700,
+            width=700,
+            xaxis_tickangle=-45
+        )
+        
         st.plotly_chart(fig)
         
     elif viz_type == "Tendances par Profession":
@@ -239,38 +302,41 @@ with tab3:
         st.plotly_chart(fig)
         
     elif viz_type == "Analyse par Durée":
-        # Créer des catégories d'heures de sommeil
-        df['Sleep Category'] = pd.cut(
+        # Créer des catégories de durée de sommeil
+        df['Sleep Duration Category'] = pd.cut(
             df['Sleep Duration'],
             bins=[0, 6, 7, 8, 12],
             labels=['< 6h', '6-7h', '7-8h', '> 8h']
         )
         
-        fig = px.violin(
+        fig = px.box(
             df,
-            x='Sleep Category',
-            y='Quality of Sleep',
-            box=True,
+            x="Sleep Duration Category",
+            y="Quality of Sleep",
+            color="Sleep Duration Category",
             title="Qualité du Sommeil selon la Durée",
             labels=feature_names
         )
         st.plotly_chart(fig)
         
         st.write("""
-        ### 📝 Comprendre les Durées de Sommeil
-        - **< 6h** : Sommeil insuffisant, attention aux risques pour la santé
-        - **6-7h** : Durée minimale acceptable pour un adulte
-        - **7-8h** : Durée idéale pour un bon repos
-        - **> 8h** : Sommeil prolongé, possible signe de fatigue excessive
+        **Observations :**
+        - Une durée de sommeil entre 7 et 8 heures est associée à une meilleure qualité de sommeil
+        - Les personnes dormant moins de 6 heures ont généralement une qualité de sommeil plus faible
+        - Un sommeil trop long (> 8h) n'améliore pas nécessairement la qualité
         """)
         
-    elif viz_type == "Impact du Stress":
-        # Créer la figure
+    elif viz_type == "Analyse Multifactorielle":
+        st.write("""
+        Ce graphique montre les relations entre le stress, l'activité physique et la qualité du sommeil.
+        La taille des points représente la durée du sommeil.
+        """)
+        
         fig = px.scatter(
             df,
             x="Stress Level",
             y="Quality of Sleep",
-            color="Physical Activity Level",  # Utiliser la valeur numérique pour le dégradé
+            color="Physical Activity Level",
             size="Sleep Duration",
             title="Impact du Stress et de l'Activité Physique sur le Sommeil",
             labels={
@@ -326,24 +392,6 @@ with tab3:
         )
         
         st.plotly_chart(fig)
-        
-        # Analyse de corrélation et explications
-        stress_corr = df['Stress Level'].corr(df['Quality of Sleep'])
-        st.write(f"""
-        ### 📊 Analyse de l'Impact du Stress
-        
-        **Interprétation des couleurs :**
-        La couleur des points représente le niveau d'activité physique :
-        - Plus le bleu est clair, plus l'activité physique est faible
-        - Plus le bleu est foncé, plus l'activité physique est élevée
-        
-        **La taille des points** représente la durée du sommeil : plus le point est grand, plus la durée de sommeil est longue.
-        
-        **Observations :**
-        - Corrélation stress/sommeil : {stress_corr:.2f}
-        - Un niveau de stress élevé est généralement associé à une moins bonne qualité de sommeil
-        - Les personnes ayant une activité physique plus élevée (points bleu foncé) semblent mieux gérer l'impact du stress sur leur sommeil
-        """)
 
 # Mise à jour de l'historique après l'analyse
 if "sleep_quality" in locals():
@@ -355,7 +403,3 @@ if "sleep_quality" in locals():
         'Activité Physique': physical_activity,
         'Pas Quotidiens': daily_steps
     })
-
-# Footer
-st.markdown("---")
-st.markdown("*Cette application est un outil d'aide à la décision et ne remplace pas l'avis d'un professionnel de santé.*")

@@ -8,13 +8,19 @@ import json
 
 app = FastAPI()
 
-# Charger le modèle et le scaler
-model = joblib.load('../models/saved_models/best_sleep_model.joblib')
-scaler = joblib.load('../models/saved_models/scaler.joblib')
+# Obtenir le chemin absolu du répertoire des modèles
+MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'saved_models')
 
-# Charger la liste des features
-with open('../models/saved_models/feature_list.txt', 'r') as f:
-    features = f.read().splitlines()
+# Charger le modèle
+try:
+    model = joblib.load(os.path.join(MODEL_DIR, 'best_random_forest_model.joblib'))
+    
+    # Charger la liste des features
+    with open(os.path.join(MODEL_DIR, 'feature_list.txt'), 'r') as f:
+        features = f.read().splitlines()
+except Exception as e:
+    print(f"Erreur lors du chargement du modèle : {str(e)}")
+    raise
 
 # Modèle de données pour les prédictions
 class SleepData(BaseModel):
@@ -53,20 +59,17 @@ def predict_sleep_quality(sleep_data: SleepData):
         data = sleep_data.data
         
         # Préparer les features pour le modèle
-        input_data = []
-        for feature in features:
+        X = np.zeros((1, len(features)))
+        for i, feature in enumerate(features):
             if feature == 'Gender_num':
-                input_data.append(1 if data['Gender'] == 'Male' else 0)
+                X[0, i] = 1 if data['Gender'] == 'Male' else 0
             elif feature == 'Blood_Pressure_num':
-                input_data.append(1 if data['Blood Pressure'] == 'High' else 0)
+                X[0, i] = 1 if data['Blood Pressure'] == 'High' else 0
             else:
-                input_data.append(data[feature])
-        
-        # Standardiser les données
-        input_scaled = scaler.transform([input_data])
+                X[0, i] = data[feature]
         
         # Prédire la qualité du sommeil
-        sleep_quality = float(model.predict(input_scaled)[0])
+        sleep_quality = float(model.predict(X)[0])
         
         # Obtenir les recommandations personnalisées
         recommendations = get_sleep_recommendations(data, sleep_quality)
@@ -86,16 +89,17 @@ def health_check():
 @app.get("/model-info")
 def model_info():
     try:
-        with open('../models/saved_models/model_metrics.json', 'r') as f:
+        metrics_path = os.path.join(MODEL_DIR, 'random_forest_model_metrics.json')
+        with open(metrics_path, 'r') as f:
             metrics = json.load(f)
         return {
-            "model_name": metrics['model_name'],
-            "performance": {
-                "cv_score": metrics['cv_score'],
-                "test_rmse": metrics['test_rmse'],
-                "test_r2": metrics['test_r2']
-            },
-            "features_used": metrics['features']
+            "model_type": "Random Forest",
+            "performance": metrics,
+            "features": features
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Impossible de charger les informations du modèle")
+        raise HTTPException(status_code=500, detail=f"Impossible de charger les informations du modèle : {str(e)}")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

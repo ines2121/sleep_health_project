@@ -83,20 +83,24 @@ def evaluate_model(model, X, y):
         'r2': r2_score(y, y_pred)
     }
 
-def save_model(model, scaler, features, metrics, save_dir='../models/saved_models'):
-    """Sauvegarde le modèle, le scaler et les métriques"""
+def save_model(model, metrics, model_type, features):
+    """Sauvegarde le modèle et ses métriques"""
+    # Créer le dossier saved_models s'il n'existe pas
+    save_dir = os.path.join(os.path.dirname(__file__), 'saved_models')
     os.makedirs(save_dir, exist_ok=True)
     
-    # Sauvegarder le modèle et le scaler
-    joblib.dump(model, f'{save_dir}/best_sleep_model.joblib')
-    joblib.dump(scaler, f'{save_dir}/scaler.joblib')
+    # Sauvegarder le modèle
+    model_path = os.path.join(save_dir, f'best_{model_type}_model.joblib')
+    joblib.dump(model, model_path)
     
-    # Sauvegarder les features
-    with open(f'{save_dir}/feature_list.txt', 'w') as f:
+    # Sauvegarder la liste des features
+    features_path = os.path.join(save_dir, 'feature_list.txt')
+    with open(features_path, 'w') as f:
         f.write('\n'.join(features))
     
     # Sauvegarder les métriques
-    with open(f'{save_dir}/model_metrics.json', 'w') as f:
+    metrics_path = os.path.join(save_dir, f'{model_type}_model_metrics.json')
+    with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=4)
 
 def main():
@@ -153,9 +157,9 @@ def main():
     
     save_model(
         best_model_results['model'],
-        scaler,
-        features,
-        metrics
+        metrics,
+        best_model_name,
+        features
     )
     
     # Afficher les résultats
