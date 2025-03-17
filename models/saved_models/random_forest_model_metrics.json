@@ -1,27 +1,12 @@
 {
-    "model_name": "random_forest",
-    "best_parameters": {
-        "max_depth": null,
+    "train_rmse": 0.06697503930572732,
+    "test_rmse": 0.1148867397177018,
+    "train_r2": 0.9967857030007357,
+    "test_r2": 0.9912509820095844,
+    "best_params": {
+        "max_depth": 10,
         "min_samples_leaf": 1,
         "min_samples_split": 2,
-        "n_estimators": 200
-    },
-    "train_metrics": {
-        "rmse": 0.261836462956047,
-        "r2": 0.9764381861575179
-    },
-    "test_metrics": {
-        "rmse": 0.6425794373720135,
-        "r2": 0.7345589285714285
-    },
-    "features": [
-        "Age",
-        "Sleep Duration",
-        "Physical Activity Level",
-        "Stress Level",
-        "Heart Rate",
-        "Daily Steps",
-        "Gender_num",
-        "Blood_Pressure_num"
-    ]
+        "n_estimators": 300
+    }
 }

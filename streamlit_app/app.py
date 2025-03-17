@@ -1,81 +1,62 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 import numpy as np
+import plotly.express as px
+from datetime import datetime, timedelta
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import requests
-import json
-from datetime import datetime
 import os
 
-# Configuration de la page
+# Configuration de la page - DOIT ÊTRE EN PREMIER
 st.set_page_config(
     page_title="Analyse de la Santé du Sommeil",
     page_icon="😴",
     layout="wide"
 )
 
-# Configuration des options en français
+# Styles CSS simplifiés
 st.markdown("""
     <style>
-        .stDownloadButton button {
-            visibility: hidden;
-        }
-        .stDownloadButton button::after {
-            visibility: visible;
-            content: 'Télécharger';
-        }
-        .stDeployButton button {
-            visibility: hidden;
-        }
-        .stDeployButton button::after {
-            visibility: visible;
-            content: 'Déployer';
-        }
-        button[title="View fullscreen"] {
-            visibility: hidden;
-        }
-        button[title="View fullscreen"]::after {
-            visibility: visible;
-            content: 'Plein écran';
-        }
+        .stDownloadButton button::after { content: 'Télécharger'; }
+        .stDeployButton button::after { content: 'Déployer'; }
+        button[title="View fullscreen"]::after { content: 'Plein écran'; }
     </style>
 """, unsafe_allow_html=True)
 
-# Dictionnaire de traduction des caractéristiques
-feature_names = {
-    'Person ID': 'ID Personne',
-    'Gender': 'Genre',
-    'Age': 'Âge',
-    'Occupation': 'Profession',
-    'Sleep Duration': 'Durée du Sommeil',
-    'Quality of Sleep': 'Qualité du Sommeil',
-    'Physical Activity Level': "Niveau d'Activité Physique",
-    'Stress Level': 'Niveau de Stress',
-    'BMI Category': 'Catégorie IMC',
-    'Blood Pressure': 'Pression Artérielle',
-    'Heart Rate': 'Fréquence Cardiaque',
-    'Daily Steps': 'Pas Quotidiens',
-    'Sleep Disorder': 'Trouble du Sommeil'
-}
+# Configuration
+API_URL = os.environ.get('API_URL', 'http://localhost:8002')
+blood_pressure_mapping = {"Normale": "Normal", "Élevée": "High"}
 
-# URL de l'API
-API_URL = os.environ.get('API_URL', 'http://api:8002')
-
-# Chargement des données d'exemple
 @st.cache_data
 def load_data():
-    return pd.read_csv("data/Sleep_health_and_lifestyle_dataset.csv")
+    df = pd.read_csv("data/Sleep_health_and_lifestyle_dataset.csv")
+    # Renommer les colonnes pour correspondre au format attendu
+    column_mapping = {
+        'BMI Category': 'BMI',
+        'Physical Activity Level': 'Physical Activity Level',
+        'Quality of Sleep': 'Quality of Sleep',
+        'Sleep Duration': 'Sleep Duration',
+        'Daily Steps': 'Daily Steps',
+        'Heart Rate': 'Heart Rate',
+        'Blood Pressure': 'Blood Pressure',
+        'Stress Level': 'Stress Level'
+    }
+    df = df.rename(columns=column_mapping)
+    
+    # Obtenir la liste unique des professions pour le selectbox
+    occupations = sorted(df['Occupation'].unique())
+    
+    return df, occupations
 
-df = load_data()
+df, occupations = load_data()
 
 st.title("😴 Analyse de la Santé du Sommeil")
 
-# Sidebar avec informations
+# Sidebar
 st.sidebar.title("ℹ️ Informations")
 st.sidebar.write("""
-Cette application analyse la qualité du sommeil et le mode de vie pour fournir 
-des insights personnalisés sur la qualité du sommeil.
+Cette application analyse la qualité du sommeil et le mode de vie.
 
 **Catégories de Sommeil :**
 - 🟢 **Excellent** : Score > 8
@@ -91,13 +72,12 @@ tab1, tab2, tab3 = st.tabs(["🔍 Analyse", "📈 Suivi", "📊 Visualisations"]
 with tab1:
     st.write("### 📊 Analyse du Sommeil et Mode de Vie")
     
-    # Création de colonnes pour l'entrée des données
     col1, col2, col3 = st.columns(3)
     
     with col1:
         age = st.number_input("Âge", min_value=18, max_value=100, value=30)
         gender = st.selectbox("Genre", ["Homme", "Femme"])
-        occupation = st.selectbox("Profession", df['Occupation'].unique())
+        occupation = st.selectbox("Profession", occupations)
         physical_activity = st.slider("Niveau d'Activité Physique (minutes/jour)", 0, 120, 30)
     
     with col2:
@@ -110,9 +90,7 @@ with tab1:
         blood_pressure = st.selectbox("Pression Artérielle", ["Normale", "Élevée"])
         heart_rate = st.number_input("Fréquence Cardiaque", min_value=60, max_value=120, value=75)
 
-    # Bouton d'analyse
     if st.button("🔍 Analyser mon sommeil", type="primary"):
-        # Préparation des données
         data = {
             'Age': age,
             'Gender': 'Male' if gender == "Homme" else "Female",
@@ -121,7 +99,7 @@ with tab1:
             'Physical Activity Level': physical_activity,
             'Stress Level': stress_level,
             'BMI': bmi,
-            'Blood Pressure': blood_pressure,
+            'Blood Pressure': blood_pressure_mapping[blood_pressure],
             'Heart Rate': heart_rate,
             'Daily Steps': daily_steps
         }
@@ -129,11 +107,15 @@ with tab1:
         try:
             with st.spinner("Analyse en cours..."):
                 response = requests.post(f"{API_URL}/predict", json={"data": data})
+                response.raise_for_status()
                 result = response.json()
+                
                 sleep_quality = result["sleep_quality"]
                 recommendations = result["recommendations"]
                 
                 # Affichage des résultats
+                st.write(f"Score de qualité du sommeil : {sleep_quality:.2f}/10")
+                
                 if sleep_quality > 8:
                     st.success("🟢 Qualité du Sommeil : Excellente")
                 elif sleep_quality > 5:
@@ -141,265 +123,247 @@ with tab1:
                 else:
                     st.error("🔴 Qualité du Sommeil : Mauvaise")
                 
-                # Affichage des recommandations
                 st.write("### 💡 Recommandations Personnalisées")
                 for rec in recommendations:
                     st.info(rec)
                 
                 # Graphique radar des facteurs
-                st.write("### 📈 Analyse des Facteurs")
-                
-                # Normalisation des valeurs pour le graphique radar
-                factors = [
-                    'Durée du Sommeil',
-                    'Activité Physique',
-                    'Pas Quotidiens',
-                    'Fréquence Cardiaque',
-                    'Stress'
-                ]
-                
-                max_values = {
-                    'Durée du Sommeil': 10,
-                    'Activité Physique': 120,
-                    'Pas Quotidiens': 25000,
-                    'Fréquence Cardiaque': 120,
-                    'Stress': 10
-                }
+                factors = ['Durée du Sommeil', 'Activité Physique', 'Pas Quotidiens', 'Fréquence Cardiaque', 'Stress']
                 
                 normalized_values = {
-                    'Durée du Sommeil': min(sleep_duration / 8, 1),  # Optimal autour de 8h
-                    'Activité Physique': min(physical_activity / 60, 1),  # Optimal autour de 60min
-                    'Pas Quotidiens': min(daily_steps / 10000, 1),  # Optimal autour de 10000 pas
-                    'Fréquence Cardiaque': min(max(60, 120 - heart_rate) / 60, 1),  # Optimal autour de 60-80
-                    'Stress': 1 - (stress_level / 10)  # Inverse pour que moins de stress soit mieux
+                    'Durée du Sommeil': min(sleep_duration / 8, 1),
+                    'Activité Physique': min(physical_activity / 60, 1),
+                    'Pas Quotidiens': min(daily_steps / 10000, 1),
+                    'Fréquence Cardiaque': min(max(60, 120 - heart_rate) / 60, 1),
+                    'Stress': 1 - (stress_level / 10)
                 }
                 
-                fig = go.Figure()
-                
-                fig.add_trace(go.Scatterpolar(
+                fig = go.Figure(data=[go.Scatterpolar(
                     r=[normalized_values[factor] for factor in factors],
                     theta=factors,
                     fill='toself',
-                    name='Vos valeurs'
-                ))
+                    name='Vos Valeurs'
+                )])
                 
                 fig.update_layout(
-                    polar=dict(
-                        radialaxis=dict(
-                            visible=True,
-                            range=[0, 1],
-                            tickmode='array',
-                            ticktext=['0%', '25%', '50%', '75%', '100%'],
-                            tickvals=[0, 0.25, 0.5, 0.75, 1],
-                            tickfont=dict(color='red')
-                        )
-                    ),
-                    showlegend=False,
-                    title={
-                        'text': "Analyse des Facteurs de Sommeil",
-                        'y': 0.95,
-                        'x': 0.5,
-                        'xanchor': 'center',
-                        'yanchor': 'top'
-                    }
+                    polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
+                    showlegend=False
                 )
                 
                 st.plotly_chart(fig)
                 
-        except requests.exceptions.ConnectionError:
-            st.error("❌ Erreur : Impossible de se connecter au service d'analyse")
         except Exception as e:
-            st.error(f"❌ Erreur : {str(e)}")
+            st.error(f"Une erreur est survenue : {str(e)}")
 
 with tab2:
     st.write("### 📈 Suivi Temporel du Sommeil")
     
-    # Initialiser l'historique s'il n'existe pas
     if 'sleep_history' not in st.session_state:
-        st.session_state.sleep_history = []
+        st.session_state.sleep_history = pd.DataFrame(columns=['Date', 'Qualité', 'Durée', 'Stress', 'Activité'])
     
-    # Afficher l'historique
-    if st.session_state.sleep_history:
-        history_df = pd.DataFrame(st.session_state.sleep_history)
+    # Formulaire d'ajout manuel
+    with st.form("ajout_manuel"):
+        st.write("#### Ajouter une entrée manuelle")
+        col1, col2 = st.columns(2)
+        with col1:
+            date = st.date_input("Date", value=pd.Timestamp.now())
+            qualite = st.slider("Qualité du sommeil", 1, 10, 7)
+            duree = st.number_input("Durée du sommeil (heures)", 4.0, 10.0, 7.0, 0.5)
+        with col2:
+            stress = st.slider("Niveau de stress", 1, 10, 5)
+            activite = st.number_input("Activité physique (minutes)", 0, 120, 30)
+        
+        if st.form_submit_button("Ajouter l'entrée"):
+            new_entry = pd.DataFrame({
+                'Date': [date],
+                'Qualité': [qualite],
+                'Durée': [duree],
+                'Stress': [stress],
+                'Activité': [activite]
+            })
+            st.session_state.sleep_history = pd.concat([st.session_state.sleep_history, new_entry], ignore_index=True)
+            st.success("Entrée ajoutée avec succès !")
+    
+    if not st.session_state.sleep_history.empty:
+        # Sélection des métriques à afficher
+        metrics = st.multiselect(
+            "Choisir les métriques à afficher",
+            ['Qualité', 'Durée', 'Stress', 'Activité'],
+            default=['Qualité']
+        )
         
         # Graphique d'évolution
-        fig_evolution = px.line(
-            history_df,
-            x='Date',
-            y='Qualité du Sommeil',
-            title="Évolution de votre Qualité de Sommeil",
-            markers=True
-        )
-        st.plotly_chart(fig_evolution)
+        fig = px.line(st.session_state.sleep_history, x='Date', y=metrics,
+                     title='Évolution des métriques de sommeil')
+        st.plotly_chart(fig)
         
-        # Tableau récapitulatif
-        st.write("### 📋 Historique Détaillé")
-        st.dataframe(history_df.style.highlight_max(subset=['Qualité du Sommeil'], color='#90EE90'))
+        # Statistiques
+        st.write("#### 📊 Statistiques de suivi")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Qualité moyenne", f"{st.session_state.sleep_history['Qualité'].mean():.1f}/10")
+        with col2:
+            st.metric("Durée moyenne", f"{st.session_state.sleep_history['Durée'].mean():.1f}h")
+        with col3:
+            st.metric("Niveau de stress moyen", f"{st.session_state.sleep_history['Stress'].mean():.1f}/10")
+        
+        # Tableau des données
+        st.write("#### 📋 Historique détaillé")
+        st.dataframe(st.session_state.sleep_history.sort_values('Date', ascending=False))
     else:
-        st.info("Aucun historique disponible. Faites votre première analyse !")
+        st.info("Aucune donnée de suivi disponible. Ajoutez des entrées pour voir les statistiques.")
 
 with tab3:
-    st.write("### 📊 Visualisations des Données")
+    st.write("### 📊 Analyse Approfondie des Données")
     
-    viz_type = st.selectbox(
-        "Choisir le type de visualisation",
-        ["Distribution", "Corrélation", "Tendances par Profession", "Analyse par Durée", "Analyse Multifactorielle"]
+    # Sélection du type d'analyse
+    analysis_type = st.selectbox(
+        "Choisir le type d'analyse",
+        ["Distribution des données", "Corrélations", "Analyse par catégorie", "Matrice de corrélation", "Analyse par profession", "Stress et Sommeil"]
     )
     
-    if viz_type == "Distribution":
-        fig = px.box(
-            df,
-            x="Quality of Sleep",
-            y="Sleep Duration",
-            color="Quality of Sleep",
-            title="Distribution de la Durée du Sommeil par Qualité",
-            labels=feature_names
-        )
-        st.plotly_chart(fig)
+    if analysis_type == "Distribution des données":
+        col1, col2 = st.columns(2)
+        with col1:
+            fig1 = px.histogram(df, x='Quality of Sleep',
+                              title='Distribution de la Qualité du Sommeil',
+                              nbins=20)
+            st.plotly_chart(fig1)
+        with col2:
+            fig2 = px.histogram(df, x='Sleep Duration',
+                              title='Distribution de la Durée du Sommeil',
+                              nbins=20)
+            st.plotly_chart(fig2)
+            
+    elif analysis_type == "Corrélations":
+        col1, col2 = st.columns(2)
+        with col1:
+            fig1 = px.scatter(df, x='Physical Activity Level', y='Quality of Sleep',
+                            title="Activité Physique vs Qualité du Sommeil",
+                            trendline="ols")
+            st.plotly_chart(fig1)
+        with col2:
+            fig2 = px.scatter(df, x='Stress Level', y='Quality of Sleep',
+                            title="Stress vs Qualité du Sommeil",
+                            trendline="ols")
+            st.plotly_chart(fig2)
+            
+    elif analysis_type == "Analyse par catégorie":
+        col1, col2 = st.columns(2)
+        with col1:
+            fig1 = px.box(df, x='BMI', y='Quality of Sleep',
+                         title='Qualité du Sommeil par IMC')
+            st.plotly_chart(fig1)
+        with col2:
+            fig2 = px.box(df, x='Blood Pressure', y='Quality of Sleep',
+                         title='Qualité du Sommeil par Pression Artérielle')
+            st.plotly_chart(fig2)
+            
+    elif analysis_type == "Matrice de corrélation":
+        # Sélectionner les colonnes numériques pertinentes
+        numeric_cols = ['Age', 'Sleep Duration', 'Quality of Sleep', 
+                       'Physical Activity Level', 'Stress Level', 
+                       'Heart Rate', 'Daily Steps']
         
-    elif viz_type == "Corrélation":
-        # Créer une copie du dataframe pour la corrélation
-        df_corr = df.copy()
+        # Calculer la matrice de corrélation
+        corr_matrix = df[numeric_cols].corr()
         
-        # Convertir les variables catégorielles en numériques
-        df_corr['Gender_num'] = (df_corr['Gender'] == 'Male').astype(int)
-        df_corr['Blood_Pressure_num'] = (df_corr['Blood Pressure'] == 'High').astype(int)
+        # Créer la heatmap avec plotly
+        fig = px.imshow(corr_matrix,
+                       labels=dict(color="Coefficient de corrélation"),
+                       x=numeric_cols,
+                       y=numeric_cols,
+                       color_continuous_scale="RdBu",
+                       aspect="auto")
         
-        # Sélectionner uniquement les colonnes numériques pour la corrélation
-        numeric_cols = ['Age', 'Sleep Duration', 'Quality of Sleep', 'Physical Activity Level',
-                       'Stress Level', 'Heart Rate', 'Daily Steps', 'Gender_num', 'Blood_Pressure_num']
-        
-        correlation = df_corr[numeric_cols].corr()
-        
-        # Traduire les noms des colonnes
-        correlation.index = [feature_names.get(col, col.replace('_num', '')) for col in correlation.index]
-        correlation.columns = [feature_names.get(col, col.replace('_num', '')) for col in correlation.columns]
-        
-        fig = px.imshow(
-            correlation,
-            labels=dict(color="Corrélation"),
-            color_continuous_scale="RdBu",
-            title="Matrice de Corrélation"
-        )
-        
-        # Ajuster la taille et la rotation des labels
         fig.update_layout(
-            height=700,
-            width=700,
-            xaxis_tickangle=-45
+            title="Matrice de Corrélation des Variables",
+            xaxis_title="",
+            yaxis_title="",
+            width=800,
+            height=800
         )
         
-        st.plotly_chart(fig)
-        
-    elif viz_type == "Tendances par Profession":
-        fig = px.box(
-            df,
-            x="Occupation",
-            y="Quality of Sleep",
-            title="Qualité du Sommeil par Profession",
-            labels=feature_names
-        )
-        st.plotly_chart(fig)
-        
-    elif viz_type == "Analyse par Durée":
-        # Créer des catégories de durée de sommeil
-        df['Sleep Duration Category'] = pd.cut(
-            df['Sleep Duration'],
-            bins=[0, 6, 7, 8, 12],
-            labels=['< 6h', '6-7h', '7-8h', '> 8h']
-        )
-        
-        fig = px.box(
-            df,
-            x="Sleep Duration Category",
-            y="Quality of Sleep",
-            color="Sleep Duration Category",
-            title="Qualité du Sommeil selon la Durée",
-            labels=feature_names
-        )
         st.plotly_chart(fig)
         
         st.write("""
-        **Observations :**
-        - Une durée de sommeil entre 7 et 8 heures est associée à une meilleure qualité de sommeil
-        - Les personnes dormant moins de 6 heures ont généralement une qualité de sommeil plus faible
-        - Un sommeil trop long (> 8h) n'améliore pas nécessairement la qualité
+        #### 📌 Interprétation des corrélations
+        - Une corrélation proche de 1 (rouge foncé) indique une forte relation positive
+        - Une corrélation proche de -1 (bleu foncé) indique une forte relation négative
+        - Une corrélation proche de 0 (blanc) indique une faible relation
         """)
         
-    elif viz_type == "Analyse Multifactorielle":
-        st.write("""
-        Ce graphique montre les relations entre le stress, l'activité physique et la qualité du sommeil.
-        La taille des points représente la durée du sommeil.
-        """)
+    elif analysis_type == "Stress et Sommeil":
+        # Créer le scatter plot
+        fig = px.scatter(df, 
+                    x='Stress Level', 
+                    y='Sleep Duration',
+                    title="Relation entre Niveau de Stress et Durée du Sommeil",
+                    labels={'Stress Level': 'Niveau de Stress', 'Sleep Duration': 'Durée du Sommeil (heures)'},
+                    height=600,
+                    trendline="ols")  # Ajoute une ligne de régression
         
-        fig = px.scatter(
-            df,
-            x="Stress Level",
-            y="Quality of Sleep",
-            color="Physical Activity Level",
-            size="Sleep Duration",
-            title="Impact du Stress et de l'Activité Physique sur le Sommeil",
-            labels={
-                "Stress Level": "Niveau de Stress",
-                "Quality of Sleep": "Qualité du Sommeil",
-                "Sleep Duration": "Durée du Sommeil",
-                "Physical Activity Level": "Niveau d'Activité Physique (minutes)"
-            },
-            color_continuous_scale='Blues',  # Utiliser un dégradé de bleus
-            size_max=25
-        )
-        
-        # Personnalisation du graphique avec thème gris foncé
+        # Personnaliser le graphique
         fig.update_layout(
-            plot_bgcolor='#1E1E1E',
-            paper_bgcolor='#1E1E1E',
-            title_font_color='white',
-            legend_title_text="Minutes d'Activité Physique",
-            legend=dict(
-                yanchor="top",
-                y=0.99,
-                xanchor="right",
-                x=0.99,
-                bgcolor='rgba(30, 30, 30, 0.8)',
-                font=dict(color='white')
+            xaxis=dict(
+                range=[0, 10],
+                dtick=1
             ),
-            font=dict(color='white')
-        )
-        
-        # Personnalisation de la barre de couleur
-        fig.update_coloraxes(
-            colorbar=dict(
-                title="Minutes d'activité",
-                titleside="right",
-                tickcolor='white',
-                tickfont=dict(color='white'),
-                titlefont=dict(color='white')
+            yaxis=dict(
+                range=[0, df['Sleep Duration'].max() + 1],
+                dtick=1
             )
         )
         
-        # Ajout des axes et de la grille avec couleurs adaptées
-        fig.update_xaxes(
-            gridcolor='rgba(255, 255, 255, 0.1)',
-            showgrid=True,
-            color='white',
-            linecolor='white'
-        )
-        fig.update_yaxes(
-            gridcolor='rgba(255, 255, 255, 0.1)',
-            showgrid=True,
-            color='white',
-            linecolor='white'
+        # Afficher le graphique
+        st.plotly_chart(fig)
+        
+        # Calculer la corrélation
+        correlation = df['Stress Level'].corr(df['Sleep Duration']).round(3)
+        
+        # Afficher l'interprétation
+        st.write(f"""
+        #### 📊 Analyse de la relation
+        - **Corrélation** : {correlation}
+        - Une corrélation négative indique que plus le stress augmente, plus la durée de sommeil diminue
+        - La ligne de tendance (en rouge) montre la tendance générale de la relation
+        - Chaque point représente une personne dans le dataset
+        """)
+        
+    else:  # Analyse par profession
+        # Créer le box plot
+        fig = px.box(df, 
+                    x='Occupation', 
+                    y='Quality of Sleep',
+                    title="Distribution de la Qualité du Sommeil par Profession",
+                    labels={'Occupation': 'Profession', 'Quality of Sleep': 'Qualité du Sommeil'},
+                    height=500)
+        
+        # Personnaliser le graphique
+        fig.update_layout(
+            xaxis_tickangle=45,
+            yaxis=dict(
+                range=[0, 10],
+                dtick=1
+            ),
+            showlegend=False
         )
         
         st.plotly_chart(fig)
+        
+        # Afficher les statistiques détaillées
+        st.write("#### 📊 Statistiques détaillées par profession")
+        prof_stats = df.groupby('Occupation').agg({
+            'Quality of Sleep': ['count', 'mean', 'median', 'std', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75)]
+        }).round(2)
+        prof_stats.columns = ['Nombre', 'Moyenne', 'Médiane', 'Écart-type', 'Q1', 'Q3']
+        st.dataframe(prof_stats.sort_values(('Médiane'), ascending=False))
 
-# Mise à jour de l'historique après l'analyse
-if "sleep_quality" in locals():
-    st.session_state.sleep_history.append({
-        'Date': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M'),
-        'Qualité du Sommeil': sleep_quality,
-        'Durée du Sommeil': sleep_duration,
-        'Niveau de Stress': stress_level,
-        'Activité Physique': physical_activity,
-        'Pas Quotidiens': daily_steps
-    })
+        # Ajouter une note explicative
+        st.write("""
+        #### 📌 Note sur l'interprétation
+        - La boîte montre les quartiles (Q1, médiane, Q3)
+        - Les "moustaches" montrent la distribution des données
+        - Les points individuels sont les valeurs extrêmes
+        - Un grand écart entre Q1 et Q3 indique une grande variabilité
+        """)
