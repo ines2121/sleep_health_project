@@ -13,7 +13,7 @@ MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', '
 
 # Charger le modèle
 try:
-    model = joblib.load(os.path.join(MODEL_DIR, 'best_random_forest_model.joblib'))
+    model = joblib.load(os.path.join(MODEL_DIR, 'best_sleep_model.joblib'))
     
     # Charger la liste des features
     with open(os.path.join(MODEL_DIR, 'feature_list.txt'), 'r') as f:

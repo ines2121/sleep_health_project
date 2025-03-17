@@ -30,9 +30,6 @@ wheels/
 # Environment variables
 .env
 
-# Model files
-models/saved_models/*.joblib
-
 # Logs
 *.log
 
