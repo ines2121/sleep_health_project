@@ -60,12 +60,12 @@ feature_names = {
 }
 
 # URL de l'API
-API_URL = "http://localhost:8000"
+API_URL = os.environ.get('API_URL', 'http://api:8002')
 
 # Chargement des données d'exemple
 @st.cache_data
 def load_data():
-    return pd.read_csv("../data/Sleep_health_and_lifestyle_dataset.csv")
+    return pd.read_csv("data/Sleep_health_and_lifestyle_dataset.csv")
 
 df = load_data()
 
