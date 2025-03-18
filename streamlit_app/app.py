@@ -130,22 +130,20 @@ with tab1:
                                    value=int(heart_range['mean']))
 
     if st.button("🔍 Analyser mon sommeil", type="primary"):
-        data = {
+        api_data = {
             'Age': age,
             'Gender': 'Male' if gender == "Homme" else "Female",
-            'Occupation': occupation,
-            'Sleep Duration': sleep_duration,
-            'Physical Activity Level': physical_activity,
-            'Stress Level': stress_level,
-            'BMI': bmi,
-            'Blood Pressure': blood_pressure_mapping[blood_pressure],
-            'Heart Rate': heart_rate,
-            'Daily Steps': daily_steps
+            'Sleep_Duration': sleep_duration,
+            'Physical_Activity_Level': physical_activity,
+            'Stress_Level': stress_level,
+            'Heart_Rate': heart_rate,
+            'Daily_Steps': daily_steps,
+            'Blood_Pressure': blood_pressure_mapping[blood_pressure]
         }
         
         try:
             with st.spinner("Analyse en cours..."):
-                response = requests.post(f"{API_URL}/predict", json={"data": data})
+                response = requests.post(f"{API_URL}/predict", json=api_data)
                 response.raise_for_status()
                 result = response.json()
                 
