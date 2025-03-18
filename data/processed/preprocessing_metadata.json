@@ -1,0 +1,48 @@
+{
+    "selected_features": [
+        "Age",
+        "Sleep Duration",
+        "Stress Level",
+        "Heart Rate"
+    ],
+    "feature_scores": {
+        "Feature": {
+            "4": "Stress Level",
+            "2": "Sleep Duration",
+            "5": "Heart Rate",
+            "0": "Age",
+            "1": "Gender_num",
+            "3": "Physical Activity Level",
+            "6": "Daily Steps",
+            "7": "Blood_Pressure_num"
+        },
+        "Score": {
+            "4": 1190.275520625155,
+            "2": 1063.7335318423393,
+            "5": 206.90634202540542,
+            "0": 76.39871775919134,
+            "1": 19.819258316249826,
+            "3": 7.922745897861669,
+            "6": 0.6564128932124054,
+            "7": 0.0
+        }
+    },
+    "scaler_mean": [
+        42.52173913043478,
+        7.156187290969899,
+        5.311036789297659,
+        70.05685618729098
+    ],
+    "scaler_scale": [
+        8.569333340377316,
+        0.787307450605086,
+        1.765588552989025,
+        4.039120340677545
+    ],
+    "dataset_shape": {
+        "total_samples": 374,
+        "train_samples": 299,
+        "test_samples": 75,
+        "n_features": 4
+    }
+}

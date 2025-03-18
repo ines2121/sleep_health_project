@@ -1,0 +1,98 @@
+{
+    "model_type": "SVR",
+    "selected_features": [
+        "Age",
+        "Gender_num",
+        "Sleep Duration",
+        "Physical Activity Level",
+        "Stress Level",
+        "Heart Rate",
+        "Daily Steps",
+        "Blood_Pressure_num"
+    ],
+    "numeric_features": [
+        "Age",
+        "Sleep Duration",
+        "Physical Activity Level",
+        "Stress Level",
+        "Heart Rate",
+        "Daily Steps"
+    ],
+    "feature_ranges": {
+        "Age": {
+            "type": "numeric",
+            "min": 27.0,
+            "max": 59.0,
+            "mean": 42.18449197860963,
+            "std": 8.673133465547243
+        },
+        "Gender_num": {
+            "type": "binary"
+        },
+        "Sleep Duration": {
+            "type": "numeric",
+            "min": 5.8,
+            "max": 8.5,
+            "mean": 7.132085561497325,
+            "std": 0.7956567308898189
+        },
+        "Physical Activity Level": {
+            "type": "numeric",
+            "min": 30.0,
+            "max": 90.0,
+            "mean": 59.17112299465241,
+            "std": 20.83080365807167
+        },
+        "Stress Level": {
+            "type": "numeric",
+            "min": 3.0,
+            "max": 8.0,
+            "mean": 5.385026737967914,
+            "std": 1.774526444198519
+        },
+        "Heart Rate": {
+            "type": "numeric",
+            "min": 65.0,
+            "max": 86.0,
+            "mean": 70.16577540106952,
+            "std": 4.135675535112215
+        },
+        "Daily Steps": {
+            "type": "numeric",
+            "min": 3000.0,
+            "max": 10000.0,
+            "mean": 6816.844919786096,
+            "std": 1617.915679133636
+        },
+        "Blood_Pressure_num": {
+            "type": "binary"
+        }
+    },
+    "hyperparameters": {
+        "kernel": "rbf",
+        "C": 1.0,
+        "epsilon": 0.2,
+        "gamma": "auto"
+    },
+    "cv_results": {
+        "r2_scores": [
+            0.9584796126124714,
+            0.95235347993145,
+            0.9760578050905435,
+            0.9137495822316272,
+            0.9465063245300047
+        ],
+        "r2_mean": 0.9494293608792193,
+        "r2_std": 0.02040157991736159,
+        "rmse_scores": [
+            0.2502770047129799,
+            0.2895822427578182,
+            0.16375365125270094,
+            0.3296248265479177,
+            0.2742080768515395
+        ],
+        "rmse_mean": 0.2614891604245913,
+        "rmse_std": 0.05526554676634738
+    },
+    "timestamp": "2025-03-17 23:20:10"
+}

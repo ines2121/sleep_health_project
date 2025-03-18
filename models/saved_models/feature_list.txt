@@ -1,8 +1,0 @@
-Age
-Gender_num
-Sleep Duration
-Physical Activity Level
-Stress Level
-Heart Rate
-Daily Steps
-Blood_Pressure_num

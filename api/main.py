@@ -9,12 +9,16 @@ import json
 app = FastAPI()
 
 # Obtenir le chemin absolu du répertoire des modèles
-MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'saved_models')
+MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'comparison_results')
 
+# Charger les métadonnées pour avoir la liste des features
 try:
-    model = joblib.load(os.path.join(MODEL_DIR, 'best_sleep_model.joblib'))
-    with open(os.path.join(MODEL_DIR, 'feature_list.txt'), 'r') as f:
-        features = f.read().splitlines()
+    with open(os.path.join(MODEL_DIR, 'model_metadata.json'), 'r') as f:
+        metadata = json.load(f)
+    features = metadata['selected_features']
+    numeric_features = metadata['numeric_features']
+    model = joblib.load(os.path.join(MODEL_DIR, 'best_model.joblib'))
+    scaler = joblib.load(os.path.join(MODEL_DIR, 'scaler.joblib'))
 except Exception as e:
     raise RuntimeError(f"Erreur lors du chargement du modèle : {str(e)}")
 
@@ -49,20 +53,30 @@ def predict_sleep_quality(sleep_data: SleepData):
         data = sleep_data.data
         X = np.zeros((1, len(features)))
         
+        # Préparer les données dans le bon ordre des features
         for i, feature in enumerate(features):
             if feature == 'Gender_num':
-                value = 1 if data['Gender'] == 'Male' else 0
+                X[0, i] = 1 if data['Gender'] == 'Male' else 0
             elif feature == 'Blood_Pressure_num':
-                value = 1 if data['Blood Pressure'] == 'High' else 0
+                X[0, i] = 1 if data['Blood Pressure'] == 'High' else 0
             else:
-                value = float(data[feature])
-            X[0, i] = value
+                X[0, i] = data[feature]
         
-        sleep_quality = float(model.predict(X)[0])
-        recommendations = get_sleep_recommendations(data, sleep_quality)
+        # Créer un DataFrame pour faciliter la standardisation
+        import pandas as pd
+        X_df = pd.DataFrame(X, columns=features)
+        
+        # Standardiser uniquement les features numériques
+        X_df[numeric_features] = scaler.transform(X_df[numeric_features])
+        
+        # Faire la prédiction
+        prediction = float(model.predict(X_df)[0])
+        
+        # Obtenir les recommandations
+        recommendations = get_sleep_recommendations(data, prediction)
         
         return {
-            "sleep_quality": sleep_quality,
+            "sleep_quality": prediction,
             "recommendations": recommendations
         }
         
@@ -71,20 +85,22 @@ def predict_sleep_quality(sleep_data: SleepData):
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {"status": "healthy"}
 
 @app.get("/model-info")
 def model_info():
-    try:
-        with open(os.path.join(MODEL_DIR, 'random_forest_model_metrics.json'), 'r') as f:
-            metrics = json.load(f)
-        return {
-            "model_type": "Random Forest",
-            "performance": metrics,
-            "features": features
+    return {
+        "model_type": "SVR",
+        "features": features,
+        "numeric_features": numeric_features,
+        "metadata": metadata,
+        "performance": {
+            "r2_mean": metadata['cv_results']['r2_mean'],
+            "r2_std": metadata['cv_results']['r2_std'],
+            "rmse_mean": metadata['cv_results']['rmse_mean'],
+            "rmse_std": metadata['cv_results']['rmse_std']
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Impossible de charger les informations du modèle : {str(e)}")
+    }
 
 if __name__ == "__main__":
     import uvicorn

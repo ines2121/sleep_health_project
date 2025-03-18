@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import requests
 import os
+import json
 
 # Configuration de la page - DOIT ÊTRE EN PREMIER
 st.set_page_config(
@@ -27,6 +28,17 @@ st.markdown("""
 # Configuration
 API_URL = os.environ.get('API_URL', 'http://localhost:8002')
 blood_pressure_mapping = {"Normale": "Normal", "Élevée": "High"}
+
+# Charger les métadonnées du modèle
+@st.cache_data
+def load_model_metadata():
+    try:
+        model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'comparison_results')
+        with open(os.path.join(model_dir, 'model_metadata.json'), 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des métadonnées : {str(e)}")
+        return None
 
 @st.cache_data
 def load_data():
@@ -50,6 +62,8 @@ def load_data():
     return df, occupations
 
 df, occupations = load_data()
+metadata = load_model_metadata()
+feature_ranges = metadata['feature_ranges'] if metadata else {}
 
 st.title("😴 Analyse de la Santé du Sommeil")
 
@@ -75,20 +89,45 @@ with tab1:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        age = st.number_input("Âge", min_value=18, max_value=100, value=30)
+        age_range = feature_ranges.get('Age', {'min': 18, 'max': 100})
+        age = st.number_input("Âge", 
+                            min_value=int(age_range['min']), 
+                            max_value=int(age_range['max']), 
+                            value=int(age_range['mean']))
         gender = st.selectbox("Genre", ["Homme", "Femme"])
         occupation = st.selectbox("Profession", occupations)
-        physical_activity = st.slider("Niveau d'Activité Physique (minutes/jour)", 0, 120, 30)
+        activity_range = feature_ranges.get('Physical Activity Level', {'min': 0, 'max': 120})
+        physical_activity = st.slider("Niveau d'Activité Physique (minutes/jour)", 
+                                   int(activity_range['min']), 
+                                   int(activity_range['max']), 
+                                   int(activity_range['mean']))
     
     with col2:
-        sleep_duration = st.slider("Durée du Sommeil (heures)", 4.0, 10.0, 7.0, 0.1)
-        stress_level = st.slider("Niveau de Stress (1-10)", 1, 10, 5)
-        daily_steps = st.number_input("Pas Quotidiens", min_value=2000, max_value=25000, value=8000)
+        sleep_range = feature_ranges.get('Sleep Duration', {'min': 4, 'max': 10})
+        sleep_duration = st.slider("Durée du Sommeil (heures)", 
+                                float(sleep_range['min']), 
+                                float(sleep_range['max']), 
+                                float(sleep_range['mean']), 
+                                0.1)
+        stress_range = feature_ranges.get('Stress Level', {'min': 1, 'max': 10})
+        stress_level = st.slider("Niveau de Stress (1-10)", 
+                              1, 
+                              int(stress_range['max']), 
+                              int(stress_range['mean']))
+        steps_range = feature_ranges.get('Daily Steps', {'min': 2000, 'max': 25000})
+        daily_steps = st.number_input("Pas Quotidiens", 
+                                    min_value=int(steps_range['min']), 
+                                    max_value=int(steps_range['max']), 
+                                    value=int(steps_range['mean']))
     
     with col3:
         bmi = st.number_input("IMC", min_value=15.0, max_value=40.0, value=23.0)
         blood_pressure = st.selectbox("Pression Artérielle", ["Normale", "Élevée"])
-        heart_rate = st.number_input("Fréquence Cardiaque", min_value=60, max_value=120, value=75)
+        heart_range = feature_ranges.get('Heart Rate', {'min': 60, 'max': 120})
+        heart_rate = st.number_input("Fréquence Cardiaque", 
+                                   min_value=int(heart_range['min']), 
+                                   max_value=int(heart_range['max']), 
+                                   value=int(heart_range['mean']))
 
     if st.button("🔍 Analyser mon sommeil", type="primary"):
         data = {
@@ -126,31 +165,6 @@ with tab1:
                 st.write("### 💡 Recommandations Personnalisées")
                 for rec in recommendations:
                     st.info(rec)
-                
-                # Graphique radar des facteurs
-                factors = ['Durée du Sommeil', 'Activité Physique', 'Pas Quotidiens', 'Fréquence Cardiaque', 'Stress']
-                
-                normalized_values = {
-                    'Durée du Sommeil': min(sleep_duration / 8, 1),
-                    'Activité Physique': min(physical_activity / 60, 1),
-                    'Pas Quotidiens': min(daily_steps / 10000, 1),
-                    'Fréquence Cardiaque': min(max(60, 120 - heart_rate) / 60, 1),
-                    'Stress': 1 - (stress_level / 10)
-                }
-                
-                fig = go.Figure(data=[go.Scatterpolar(
-                    r=[normalized_values[factor] for factor in factors],
-                    theta=factors,
-                    fill='toself',
-                    name='Vos Valeurs'
-                )])
-                
-                fig.update_layout(
-                    polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
-                    showlegend=False
-                )
-                
-                st.plotly_chart(fig)
                 
         except Exception as e:
             st.error(f"Une erreur est survenue : {str(e)}")
@@ -198,172 +212,133 @@ with tab2:
         st.plotly_chart(fig)
         
         # Statistiques
-        st.write("#### 📊 Statistiques de suivi")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Qualité moyenne", f"{st.session_state.sleep_history['Qualité'].mean():.1f}/10")
-        with col2:
-            st.metric("Durée moyenne", f"{st.session_state.sleep_history['Durée'].mean():.1f}h")
-        with col3:
-            st.metric("Niveau de stress moyen", f"{st.session_state.sleep_history['Stress'].mean():.1f}/10")
+        st.write("### 📊 Statistiques")
+        stats = st.session_state.sleep_history[metrics].describe()
+        st.dataframe(stats)
         
-        # Tableau des données
-        st.write("#### 📋 Historique détaillé")
-        st.dataframe(st.session_state.sleep_history.sort_values('Date', ascending=False))
-    else:
-        st.info("Aucune donnée de suivi disponible. Ajoutez des entrées pour voir les statistiques.")
+        # Option de téléchargement
+        csv = st.session_state.sleep_history.to_csv(index=False)
+        st.download_button(
+            label="📥 Télécharger l'historique",
+            data=csv,
+            file_name='sleep_history.csv',
+            mime='text/csv'
+        )
 
 with tab3:
     st.write("### 📊 Analyse Approfondie des Données")
     
     # Sélection du type d'analyse
     analysis_type = st.selectbox(
-        "Choisir le type d'analyse",
-        ["Distribution des données", "Corrélations", "Analyse par catégorie", "Matrice de corrélation", "Analyse par profession", "Stress et Sommeil"]
+        "Type d'analyse",
+        ["Corrélations", "Distribution des Variables", "Histogramme du Sommeil", "Comparaison des Modèles"]
     )
     
-    if analysis_type == "Distribution des données":
-        col1, col2 = st.columns(2)
-        with col1:
-            fig1 = px.histogram(df, x='Quality of Sleep',
-                              title='Distribution de la Qualité du Sommeil',
-                              nbins=20)
-            st.plotly_chart(fig1)
-        with col2:
-            fig2 = px.histogram(df, x='Sleep Duration',
-                              title='Distribution de la Durée du Sommeil',
-                              nbins=20)
-            st.plotly_chart(fig2)
-            
-    elif analysis_type == "Corrélations":
-        col1, col2 = st.columns(2)
-        with col1:
-            fig1 = px.scatter(df, x='Physical Activity Level', y='Quality of Sleep',
-                            title="Activité Physique vs Qualité du Sommeil",
-                            trendline="ols")
-            st.plotly_chart(fig1)
-        with col2:
-            fig2 = px.scatter(df, x='Stress Level', y='Quality of Sleep',
-                            title="Stress vs Qualité du Sommeil",
-                            trendline="ols")
-            st.plotly_chart(fig2)
-            
-    elif analysis_type == "Analyse par catégorie":
-        col1, col2 = st.columns(2)
-        with col1:
-            fig1 = px.box(df, x='BMI', y='Quality of Sleep',
-                         title='Qualité du Sommeil par IMC')
-            st.plotly_chart(fig1)
-        with col2:
-            fig2 = px.box(df, x='Blood Pressure', y='Quality of Sleep',
-                         title='Qualité du Sommeil par Pression Artérielle')
-            st.plotly_chart(fig2)
-            
-    elif analysis_type == "Matrice de corrélation":
-        # Sélectionner les colonnes numériques pertinentes
-        numeric_cols = ['Age', 'Sleep Duration', 'Quality of Sleep', 
-                       'Physical Activity Level', 'Stress Level', 
-                       'Heart Rate', 'Daily Steps']
+    if analysis_type == "Corrélations":
+        st.write("## 📊 Matrice de Corrélation")
+        
+        # Sélectionner les colonnes numériques
+        numeric_cols = ['Quality of Sleep', 'Sleep Duration', 'Physical Activity Level',
+                       'Stress Level', 'Heart Rate', 'Daily Steps', 'Age']
         
         # Calculer la matrice de corrélation
         corr_matrix = df[numeric_cols].corr()
         
         # Créer la heatmap avec plotly
-        fig = px.imshow(corr_matrix,
-                       labels=dict(color="Coefficient de corrélation"),
-                       x=numeric_cols,
-                       y=numeric_cols,
-                       color_continuous_scale="RdBu",
-                       aspect="auto")
+        fig = go.Figure(data=go.Heatmap(
+            z=corr_matrix.values,
+            x=corr_matrix.columns,
+            y=corr_matrix.columns,
+            colorscale='RdBu',
+            zmid=0
+        ))
         
         fig.update_layout(
-            title="Matrice de Corrélation des Variables",
-            xaxis_title="",
-            yaxis_title="",
-            width=800,
-            height=800
+            title='Matrice de Corrélation des Variables',
+            xaxis_title='Variables',
+            yaxis_title='Variables'
         )
         
         st.plotly_chart(fig)
         
-        st.write("""
-        #### 📌 Interprétation des corrélations
-        - Une corrélation proche de 1 (rouge foncé) indique une forte relation positive
-        - Une corrélation proche de -1 (bleu foncé) indique une forte relation négative
-        - Une corrélation proche de 0 (blanc) indique une faible relation
-        """)
+        # Afficher les corrélations les plus fortes avec la qualité du sommeil
+        st.write("### 🎯 Corrélations avec la Qualité du Sommeil")
+        sleep_corr = corr_matrix['Quality of Sleep'].sort_values(ascending=False)
         
-    elif analysis_type == "Stress et Sommeil":
-        # Créer le scatter plot
-        fig = px.scatter(df, 
-                    x='Stress Level', 
-                    y='Sleep Duration',
-                    title="Relation entre Niveau de Stress et Durée du Sommeil",
-                    labels={'Stress Level': 'Niveau de Stress', 'Sleep Duration': 'Durée du Sommeil (heures)'},
-                    height=600,
-                    trendline="ols")  # Ajoute une ligne de régression
+        for var, corr in sleep_corr.items():
+            if var != 'Quality of Sleep':
+                if abs(corr) > 0.5:
+                    emoji = "🟢" if corr > 0 else "🔴"
+                elif abs(corr) > 0.3:
+                    emoji = "🟡" if corr > 0 else "🟠"
+                else:
+                    emoji = "⚪️"
+                st.write(f"{emoji} {var}: {corr:.3f}")
+    
+    elif analysis_type == "Distribution des Variables":
+        st.write("## 📊 Distribution des Variables")
         
-        # Personnaliser le graphique
-        fig.update_layout(
-            xaxis=dict(
-                range=[0, 10],
-                dtick=1
-            ),
-            yaxis=dict(
-                range=[0, df['Sleep Duration'].max() + 1],
-                dtick=1
-            )
+        # Sélection de la variable
+        variable = st.selectbox(
+            "Choisir une variable",
+            ['Quality of Sleep', 'Sleep Duration', 'Physical Activity Level',
+             'Stress Level', 'Heart Rate', 'Daily Steps', 'Age']
         )
         
-        # Afficher le graphique
-        st.plotly_chart(fig)
+        # Créer un subplot avec histogramme et boxplot
+        fig = make_subplots(rows=2, cols=1, 
+                          subplot_titles=('Distribution', 'Boîte à Moustaches'),
+                          row_heights=[0.7, 0.3])
         
-        # Calculer la corrélation
-        correlation = df['Stress Level'].corr(df['Sleep Duration']).round(3)
-        
-        # Afficher l'interprétation
-        st.write(f"""
-        #### 📊 Analyse de la relation
-        - **Corrélation** : {correlation}
-        - Une corrélation négative indique que plus le stress augmente, plus la durée de sommeil diminue
-        - La ligne de tendance (en rouge) montre la tendance générale de la relation
-        - Chaque point représente une personne dans le dataset
-        """)
-        
-    else:  # Analyse par profession
-        # Créer le box plot
-        fig = px.box(df, 
-                    x='Occupation', 
-                    y='Quality of Sleep',
-                    title="Distribution de la Qualité du Sommeil par Profession",
-                    labels={'Occupation': 'Profession', 'Quality of Sleep': 'Qualité du Sommeil'},
-                    height=500)
-        
-        # Personnaliser le graphique
-        fig.update_layout(
-            xaxis_tickangle=45,
-            yaxis=dict(
-                range=[0, 10],
-                dtick=1
-            ),
-            showlegend=False
+        # Ajouter l'histogramme
+        fig.add_trace(
+            go.Histogram(x=df[variable], name='Distribution'),
+            row=1, col=1
         )
         
+        # Ajouter le boxplot
+        fig.add_trace(
+            go.Box(x=df[variable], name='Boîte à Moustaches'),
+            row=2, col=1
+        )
+        
+        fig.update_layout(height=600, title_text=f"Analyse de {variable}")
         st.plotly_chart(fig)
         
-        # Afficher les statistiques détaillées
-        st.write("#### 📊 Statistiques détaillées par profession")
-        prof_stats = df.groupby('Occupation').agg({
-            'Quality of Sleep': ['count', 'mean', 'median', 'std', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75)]
-        }).round(2)
-        prof_stats.columns = ['Nombre', 'Moyenne', 'Médiane', 'Écart-type', 'Q1', 'Q3']
-        st.dataframe(prof_stats.sort_values(('Médiane'), ascending=False))
-
-        # Ajouter une note explicative
-        st.write("""
-        #### 📌 Note sur l'interprétation
-        - La boîte montre les quartiles (Q1, médiane, Q3)
-        - Les "moustaches" montrent la distribution des données
-        - Les points individuels sont les valeurs extrêmes
-        - Un grand écart entre Q1 et Q3 indique une grande variabilité
-        """)
+        # Statistiques descriptives
+        st.write("### 📈 Statistiques Descriptives")
+        stats = df[variable].describe()
+        st.dataframe(stats)
+    
+    elif analysis_type == "Histogramme du Sommeil":
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Histogramme de la durée du sommeil
+            fig = px.histogram(df, x='Sleep Duration',
+                             title='Distribution de la Durée du Sommeil',
+                             labels={'Sleep Duration': 'Durée du Sommeil (heures)',
+                                    'count': 'Nombre de Personnes'})
+            st.plotly_chart(fig)
+        
+        with col2:
+            # Histogramme de la qualité du sommeil
+            fig = px.histogram(df, x='Quality of Sleep',
+                             title='Distribution de la Qualité du Sommeil',
+                             labels={'Quality of Sleep': 'Qualité du Sommeil (1-10)',
+                                    'count': 'Nombre de Personnes'})
+            st.plotly_chart(fig)
+    
+    elif analysis_type == "Comparaison des Modèles":
+        st.write("## 📊 Comparaison des Modèles de Prédiction")
+        
+        # Charger les résultats de comparaison
+        comparison_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 
+                                     'models', 'comparison_results', 'model_comparison.csv')
+        
+        if os.path.exists(comparison_path):
+            comparison_df = pd.read_csv(comparison_path)
+            
+            # Afficher les résultats détaillés
+            st.write("### 📋 Résultats Détaillés")
+            st.dataframe(comparison_df)
